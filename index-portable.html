@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>図形フォトモザイク生成 Pro - スタンドアロン版</title>
+  
+  <!-- Tailwind CSS Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React & ReactDOM CDN (高互換性バージョン) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.3/babel.min.js" crossorigin></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&family=Noto+Sans+JP:wght@400;500;700;950&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans JP', sans-serif;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useEffect, useRef } = React;
+
+    const G20_LANGUAGES = [
+      { "code": "ja", "name": "日本語 (Japan)", "flag": "🇯🇵", "word": "平和" },
+      { "code": "en-US", "name": "English (US)", "flag": "🇺🇸", "word": "LOVE" },
+      { "code": "en-GB", "name": "English (UK)", "flag": "🇬🇧", "word": "HOPE" },
+      { "code": "zh-CN", "name": "简体中文 (China)", "flag": "🇨🇳", "word": "福" },
+      { "code": "de", "name": "Deutsch (Germany)", "flag": "🇩🇪", "word": "LIEBE" },
+      { "code": "fr", "name": "Français (France)", "flag": "🇫🇷", "word": "AMOUR" },
+      { "code": "it", "name": "Italiano (Italy)", "flag": "🇮🇹", "word": "AMORE" },
+      { "code": "ko", "name": "한국어 (Korea)", "flag": "🇰🇷", "word": "사랑" },
+      { "code": "hi", "name": "हिन्दी (India)", "flag": "🇮🇳", "word": "प्यार" },
+      { "code": "pt", "name": "Português (Brazil)", "flag": "🇧🇷", "word": "AMOR" },
+      { "code": "ru", "name": "Русский (Russia)", "flag": "🇷🇺", "word": "МИＲ" },
+      { "code": "es-MX", "name": "Español (Mexico)", "flag": "🇲🇽", "word": "AMOR" },
+      { "code": "es-AR", "name": "Español (Argentina)", "flag": "🇦🇷", "word": "VIDA" },
+      { "code": "id", "name": "Bahasa Indonesia", "flag": "🇮🇩", "word": "KASIH" },
+      { "code": "ar", "name": "العربية (Saudi Arabia)", "flag": "🇸🇦", "word": "سلام" },
+      { "code": "tr", "name": "Türkçe (Turkey)", "flag": "🇹🇷", "word": "SEVGİ" },
+      { "code": "en-AU", "name": "English (Australia)", "flag": "🇦🇺", "word": "MATE" },
+      { "code": "en-CA", "name": "English (Canada)", "flag": "🇨🇦", "word": "PEACE" },
+      { "code": "en-ZA", "name": "English (South Africa)", "flag": "🇿🇦", "word": "UNITY" },
+      { "code": "eu", "name": "English (EU)", "flag": "🇪🇺", "word": "UNITY" }
+    ];
+
+    const PRESET_SHAPES = [
+      { "id": "shape_preset", "name": "型 (Silhouette)", "icon": "🔮", "type": "svg" },
+      { "id": "custom_text", "name": "テキスト", "icon": "✍️", "type": "text" }
+    ];
+
+    const SHAPE_SUB_PRESETS = [
+      { "id": "heart", "name": "ハート型", "icon": "❤️", "svgPath": "M50,25 C35,5 5,10 5,42 C5,70 45,95 50,95 C55,95 95,70 95,42 C95,10 65,5 50,25 Z" },
+      { "id": "star", "name": "星型", "icon": "⭐", "svgPath": "M50,5 L63,38 L98,38 L70,58 L81,91 L50,70 L19,91 L30,58 L2,38 L37,38 Z" },
+      { "id": "diamond", "name": "ダイヤ型", "icon": "💎", "svgPath": "M50,5 L95,50 L50,95 L5,50 Z" },
+      { "id": "circle", "name": "円型", "icon": "⚪", "svgPath": "M50,10 A40,40 0 1,1 49.9,10 Z" },
+      { "id": "triangle", "name": "三角型", "icon": "🔺", "svgPath": "M50,10 L90,85 L10,85 Z" },
+      { "id": "square", "name": "四角型", "icon": "⬛", "svgPath": "M10,10 L90,10 L90,90 L10,90 Z" }
+    ];
+
+    const SAMPLE_IMAGES = []; // サンプル画像はすべてクリア
+
+    // --- Silhouette Generation & Mosaic Layout Algorithm ---
+    function generateSilhouetteMask(shapeId, svgPath, customText, fontSize = 80, fontFamily = 'Inter, "Mplus 1p", "Hiragino Kaku Gothic Pro", "Noto Sans JP", sans-serif') {
+      return new Promise((resolve) => {
+        const size = 100;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+          resolve(Array(size).fill(null).map(() => Array(size).fill(true)));
+          return;
+        }
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, size, size);
+        ctx.fillStyle = '#000000';
+
+        if (shapeId === 'japanese_text' || !svgPath) {
+          const textToDraw = customText || 'LOVE';
+          ctx.font = 'bold ' + fontSize + 'px ' + fontFamily;
+          ctx.textBaseline = 'middle';
+          ctx.textAlign = 'center';
+
+          const lines = splitTextIntoLines(ctx, textToDraw, 90);
+          if (lines.length === 1) {
+            ctx.fillText(lines[0], 50, 50);
+          } else if (lines.length === 2) {
+            ctx.font = 'bold ' + (fontSize * 0.72) + 'px ' + fontFamily;
+            ctx.fillText(lines[0], 50, 32);
+            ctx.fillText(lines[1], 50, 68);
+          } else {
+            ctx.font = 'bold ' + (fontSize * 0.52) + 'px ' + fontFamily;
+            const step = 80 / (lines.length + 1);
+            lines.forEach((line, index) => {
+              ctx.fillText(line, 50, 10 + step * (index + 1));
+            });
+          }
+        } else {
+          const p = new Path2D(svgPath);
+          ctx.fill(p);
+        }
+
+        const imgData = ctx.getImageData(0, 0, size, size);
+        const data = imgData.data;
+        const grid = [];
+
+        for (let y = 0; y < size; y++) {
+          const row = [];
+          for (let x = 0; x < size; x++) {
+            const idx = (y * size + x) * 4;
+            const r = data[idx];
+            const g = data[idx+1];
+            const b = data[idx+2];
+            const isDark = (r + g + b) / 3 < 128;
+            row.push(isDark);
+          }
+          grid.push(row);
+        }
+
+        resolve(grid);
+      });
+
+      function splitTextIntoLines(ctx, textToDraw, maxWidth) {
+        if (textToDraw.length <= 4) return [textToDraw];
+        const textWidth = ctx.measureText(textToDraw).width;
+        if (textWidth <= maxWidth) {
+          return [textToDraw];
+        } else {
+          const midHalf = Math.ceil(textToDraw.length / 2);
+          return [textToDraw.slice(0, midHalf), textToDraw.slice(midHalf)];
+        }
+      }
+    }
+
+    function getCoverageRatio(mask, x, y, w, h) {
+      const size = mask.length;
+      let matches = 0;
+      let total = 0;
+
+      const startX = Math.max(0, Math.floor(x));
+      const endX = Math.min(size - 1, Math.floor(x + w));
+      const startY = Math.max(0, Math.floor(y));
+      const endY = Math.min(size - 1, Math.floor(y + h));
+
+      for (let py = startY; py <= endY; py++) {
+        for (let px = startX; px <= endX; px++) {
+          total++;
+          if (mask[py] && mask[py][px]) {
+            matches++;
+          }
+        }
+      }
+
+      return total > 0 ? matches / total : 0;
+    }
+
+    function calculateMosaicLayout(mask, layoutStyle, density, shapeId) {
+      const frames = [];
+      const size = 100;
+      
+      const columns = Math.max(3, Math.min(60, Math.round(density / 3.5)));
+      const rows = columns;
+      const cellW = size / columns;
+      const cellH = size / rows;
+      const threshold = (shapeId === 'japanese_text') ? 0.35 : 0.45;
+
+      if (layoutStyle === 'GRID') {
+        let count = 0;
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < columns; c++) {
+            const x = c * cellW;
+            const y = r * cellH;
+            const coverage = getCoverageRatio(mask, x, y, cellW, cellH);
+            if (coverage >= threshold) {
+              frames.push({
+                id: 'frame-grid-' + r + '-' + c + '-' + (count++),
+                x: Math.round(x * 10) / 10,
+                y: Math.round(y * 10) / 10,
+                width: Math.round((cellW - 1) * 10) / 10,
+                height: Math.round((cellH - 1) * 10) / 10,
+                imageUrl: null,
+                shapeId
+              });
+            }
+          }
+        }
+      } else if (layoutStyle === 'OFFS_BRICK') {
+        let count = 0;
+        for (let r = 0; r < rows; r++) {
+          const isOffsetRow = r % 2 === 1;
+          const colsInRow = isOffsetRow ? columns + 1 : columns;
+          
+          for (let c = 0; c < colsInRow; c++) {
+            let x = c * cellW - (isOffsetRow ? cellW / 2 : 0);
+            const y = r * cellH;
+            let w = cellW;
+            
+            if (x < 0) {
+              w = cellW + x;
+              x = 0;
+            }
+            if (x + w > size) {
+              w = size - x;
+            }
+
+            if (w < cellW / 3) continue;
+
+            const coverage = getCoverageRatio(mask, x, y, w, cellH);
+            if (coverage >= threshold) {
+              frames.push({
+                id: 'frame-brick-' + r + '-' + c + '-' + (count++),
+                x: Math.round(x * 10) / 10,
+                y: Math.round(y * 10) / 10,
+                width: Math.round((w - 1.2) * 10) / 10,
+                height: Math.round((cellH - 1) * 10) / 10,
+                imageUrl: null,
+                shapeId
+              });
+            }
+          }
+        }
+      }
+
+      return frames;
+    }
+
+    // --- Inline Icon SVG Assets ---
+    const Icon = ({ name, className = "w-4 h-4 text-current" }) => {
+      const icons = {
+        sparkles: (
+          <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+          </svg>
+        ),
+        heart: (
+          <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+        ),
+        image: (
+          <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        ),
+        upload: (
+          <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+        ),
+        copy: (
+          <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002 2h2a2 2 0 002-2" />
+          </svg>
+        ),
+        shuffle: (
+          <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18.5M20 20v-5h-.581m0 0a8.003 8.003 0 11-15.357-2V15" />
+          </svg>
+        ),
+        grid: (
+          <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+          </svg>
+        ),
+        layers: (
+          <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+        ),
+        type: (
+          <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M12 6v14m-5 0h10" />
+          </svg>
+        ),
+        download: (
+          <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+        ),
+        check: (
+          <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        ),
+        'trash-2': (
+          <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        ),
+        chevronRight: (
+          <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
+        ),
+        chevronLeft: (
+          <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+        )
+      };
+      return icons[name] || (
+        <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="10" />
+        </svg>
+      );
+    };
+
+    // --- Main App React Component ---
+    function App() {
+      const [selectedShape, setSelectedShape] = useState(PRESET_SHAPES[0]);
+      const [selectedSubShape, setSelectedSubShape] = useState(SHAPE_SUB_PRESETS[0]);
+      const [customText, setCustomText] = useState('LOVE');
+      const [layoutStyle, setLayoutStyle] = useState('GRID');
+      const [density, setDensity] = useState(25);
+      const [frames, setFrames] = useState([]);
+      const [isLoading, setIsLoading] = useState(false);
+      const [currentPool, setCurrentPool] = useState([]); // ユーザー追加写真プール
+      const [bgHue, setBgHue] = useState(210);
+      const [bgSat, setBgSat] = useState(16);
+      const [bgLight, setBgLight] = useState(95);
+      const [canvasBg, setCanvasBg] = useState('#f1f5f9');
+      const [canvasAspectRatio, setCanvasAspectRatio] = useState('1:1');
+      const [zoomLevel, setZoomLevel] = useState(100);
+      const [hoveredFrameId, setHoveredFrameId] = useState(null);
+      const [selectedFrameId, setSelectedFrameId] = useState(null);
+      const [activeTab, setActiveTab] = useState('template');
+      const [successMessage, setSuccessMessage] = useState(null);
+      const [appLang, setAppLang] = useState('ja');
+      const [tutorialStep, setTutorialStep] = useState(1);
+
+      useEffect(() => {
+        setCanvasBg('hsl(' + bgHue + ',' + bgSat + '%,' + bgLight + '%)');
+      }, [bgHue, bgSat, bgLight]);
+
+      useEffect(() => {
+        let active = true;
+        async function recomputeLayout() {
+          setIsLoading(true);
+          try {
+            const isShape = selectedShape.id === 'shape_preset';
+            const textVal = customText;
+            const pathVal = isShape ? selectedSubShape.svgPath : undefined;
+            const effShapeId = isShape ? 'shape_preset' : 'japanese_text';
+
+            const mask = await generateSilhouetteMask(effShapeId, pathVal, textVal);
+            if (!active) return;
+
+            const safeDensity = !density || density < 10 ? 10 : Number(density);
+            const calculated = calculateMosaicLayout(mask, layoutStyle, safeDensity, effShapeId);
+            const matched = calculated.map((newFrame) => {
+              const oldFrame = frames.find(f => Math.abs(f.x - newFrame.x) < 2 && Math.abs(f.y - newFrame.y) < 2);
+              if (oldFrame && oldFrame.imageUrl) {
+                return { ...newFrame, imageUrl: oldFrame.imageUrl };
+              }
+              return newFrame;
+            });
+
+            setFrames(matched);
+          } catch (error) {
+            console.error(error);
+          } finally {
+            if (active) setIsLoading(false);
+          }
+        }
+        recomputeLayout();
+        return () => { active = false; };
+      }, [selectedShape, selectedSubShape, customText, layoutStyle, density]);
+
+      const triggerSuccessToast = (msg) => {
+        setSuccessMessage(msg);
+        setTimeout(() => setSuccessMessage(null), 4000);
+      };
+
+      const handleAutoFillPhotos = () => {
+        if (currentPool.length === 0) {
+          triggerSuccessToast("❌ プールに写真がありません。先に写真を追加してください。");
+          return;
+        }
+        setFrames(prev => prev.map((frame, i) => {
+          const url = currentPool[i % currentPool.length];
+          return { ...frame, imageUrl: url };
+        }));
+        triggerSuccessToast("すべてのフレームに写真が自動充填されました！");
+      };
+
+      const handleClearPhotoAssignments = () => {
+        setFrames(prev => prev.map(f => ({ ...f, imageUrl: null })));
+        triggerSuccessToast("写真の割り当てをクリアしました。");
+      };
+
+      const handleShufflePhotos = () => {
+        const allocatedUrls = frames.map(f => f.imageUrl).filter(Boolean);
+        if (allocatedUrls.length === 0) {
+          if (currentPool.length === 0) {
+            triggerSuccessToast("❌ プールに写真がありません。先に写真を追加してください。");
+            return;
+          }
+          setFrames(prev => prev.map(f => {
+            const rnd = currentPool[Math.floor(Math.random() * currentPool.length)];
+            return { ...f, imageUrl: rnd };
+          }));
+        } else {
+          const shuffled = [...allocatedUrls].sort(() => Math.random() - 0.5);
+          let index = 0;
+          setFrames(prev => prev.map(f => {
+            if (f.imageUrl) {
+              const nextUrl = shuffled[index % shuffled.length];
+              index++;
+              return { ...f, imageUrl: nextUrl };
+            }
+            return f;
+          }));
+        }
+        triggerSuccessToast("割り当て写真を一括シャッフルしました！");
+      };
+
+      const loadFrameImage = (frame) => {
+        return new Promise((resolve) => {
+          if (!frame.imageUrl) {
+            resolve({ frameId: frame.id, img: null });
+            return;
+          }
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => resolve({ frameId: frame.id, img });
+          img.onerror = () => resolve({ frameId: frame.id, img: null });
+          img.src = frame.imageUrl;
+        });
+      };
+
+      const handleLocalFileSelect = (e) => {
+        const files = e.target.files;
+        if (!files) return;
+        const fileList = Array.from(files);
+        const loadedUrls = [];
+        let loadedCount = 0;
+
+        fileList.forEach(file => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            loadedUrls.push(event.target.result);
+            loadedCount++;
+            if (loadedCount === fileList.length) {
+              setCurrentPool(prev => [...loadedUrls, ...prev]);
+              triggerSuccessToast("📸 ローカル写真を" + fileList.length + "枚追加しました！");
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+      };
+
+      // Google フォトから一括で取り込むアクション (アカウントからダウンロードした画像をドラッグ、または一括追加)
+      const handleGooglePhotosSelect = (e) => {
+        const files = e.target.files;
+        if (!files) return;
+        const fileList = Array.from(files);
+        const loadedUrls = [];
+        let loadedCount = 0;
+
+        fileList.forEach(file => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            loadedUrls.push(event.target.result);
+            loadedCount++;
+            if (loadedCount === fileList.length) {
+              setCurrentPool(prev => [...loadedUrls, ...prev]);
+              triggerSuccessToast("🔵 Google フォトから" + fileList.length + "枚の写真を取り込みました！");
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+      };
+
+      // Amazon Photosから一括で取り込むアクション
+      const handleAmazonPhotosSelect = (e) => {
+        const files = e.target.files;
+        if (!files) return;
+        const fileList = Array.from(files);
+        const loadedUrls = [];
+        let loadedCount = 0;
+
+        fileList.forEach(file => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            loadedUrls.push(event.target.result);
+            loadedCount++;
+            if (loadedCount === fileList.length) {
+              setCurrentPool(prev => [...loadedUrls, ...prev]);
+              triggerSuccessToast("🔶 Amazon Photosから" + fileList.length + "枚の写真を取り込みました！");
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+      };
+
+      const handleExportPNG = async () => {
+        setIsLoading(true);
+        try {
+          const loadPromises = frames.map(frame => loadFrameImage(frame));
+          const loadedResults = await Promise.all(loadPromises);
+          const imageMap = new Map();
+          loadedResults.forEach(res => {
+            if (res.img) imageMap.set(res.frameId, res.img);
+          });
+
+          const canvas = document.createElement('canvas');
+          let canvasWidth = 1200;
+          let canvasHeight = 1200;
+          if (canvasAspectRatio === '3:4') {
+            canvasWidth = 1200; canvasHeight = 1600;
+          } else if (canvasAspectRatio === '4:3') {
+            canvasWidth = 1600; canvasHeight = 1200;
+          } else if (canvasAspectRatio === '16:9') {
+            canvasWidth = 1600; canvasHeight = 900;
+          } else if (canvasAspectRatio === '9:16') {
+            canvasWidth = 900; canvasHeight = 1600;
+          }
+
+          canvas.width = canvasWidth;
+          canvas.height = canvasHeight;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error();
+
+          ctx.fillStyle = canvasBg;
+          ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+          const pad = canvasWidth * 0.05;
+          const drawWidth = canvasWidth - pad * 2;
+          const drawHeight = canvasHeight - pad * 2;
+
+          frames.forEach(frame => {
+            const fx = pad + (frame.x / 100) * drawWidth;
+            const fy = pad + (frame.y / 100) * drawHeight;
+            const fRefWidth = (frame.width / 100) * drawWidth;
+            const fRefHeight = (frame.height / 100) * drawHeight;
+            const img = imageMap.get(frame.id);
+
+            ctx.save();
+            ctx.beginPath();
+            const radius = 3;
+            ctx.moveTo(fx + radius, fy);
+            ctx.arcTo(fx + fRefWidth, fy, fx + fRefWidth, fy + fRefHeight, radius);
+            ctx.arcTo(fx + fRefWidth, fy + fRefHeight, fx, fy + fRefHeight, radius);
+            ctx.arcTo(fx, fy + fRefHeight, fx, fy, radius);
+            ctx.arcTo(fx, fy, fx + fRefWidth, fy, radius);
+            ctx.closePath();
+            ctx.clip();
+
+            if (img) {
+              const imgAspect = img.width / img.height;
+              const frameAspect = fRefWidth / fRefHeight;
+              let sx = 0, sy = 0, sw = img.width, sh = img.height;
+              if (imgAspect > frameAspect) {
+                sw = img.height * frameAspect;
+                sx = (img.width - sw) / 2;
+              } else {
+                sh = img.width / frameAspect;
+                sy = (img.height - sh) / 2;
+              }
+              ctx.drawImage(img, sx, sy, sw, sh, fx, fy, fRefWidth, fRefHeight);
+            } else {
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+              ctx.fillRect(fx, fy, fRefWidth, fRefHeight);
+              ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+              ctx.lineWidth = 1;
+              ctx.strokeRect(fx, fy, fRefWidth, fRefHeight);
+            }
+            ctx.restore();
+          });
+
+          const dataUrl = canvas.toDataURL('image/png');
+          const link = document.createElement('a');
+          link.download = "mosaic-photo-" + Date.now() + ".png";
+          link.href = dataUrl;
+          link.click();
+          triggerSuccessToast("📸 完成した高品質なモザイクフォトをPNG画像として書き出しました！");
+        } catch (err) {
+          triggerSuccessToast("❌ 画像の出力中にエラーが発生しました。");
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const filledCount = frames.filter(f => f.imageUrl).length;
+      const progressPercent = frames.length > 0 ? Math.round((filledCount / frames.length) * 100) : 0;
+
+      return (
+        <div className="flex flex-col h-screen w-full bg-slate-50 text-slate-800 font-sans overflow-hidden" id="sleek-app-root">
+          <header className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200 shrink-0 shadow-sm z-10" id="m-header">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 shrink-0 flex items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white shadow-md">
+                <Icon name="sparkles" className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-base font-bold tracking-tight text-slate-900">図形フォトモザイク生成 Pro</h1>
+                  <select
+                    value={appLang}
+                    onChange={(e) => {
+                      const l = e.target.value;
+                      setAppLang(l);
+                      const lObj = G20_LANGUAGES.find(lang => lang.code === l);
+                      if (lObj) {
+                        setCustomText(lObj.word);
+                        triggerSuccessToast("🌐 言語を " + lObj.flag + " に変更、文字「" + lObj.word + "」がセットされました。");
+                      }
+                    }}
+                    className="bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 text-[10.5px] font-bold text-indigo-700 outline-none cursor-pointer"
+                  >
+                    {G20_LANGUAGES.map(l => (
+                      <option key={l.code} value={l.code}>{l.flag} {l.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="hidden sm:inline-block text-xs text-slate-500 bg-slate-100 p-1.5 px-3 rounded-full font-mono font-bold font-semibold">総フレーム数: {frames.length}</span>
+            </div>
+          </header>
+
+          <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+            {/* Sidebar Controls */}
+            <aside className="w-full md:w-[360px] h-[300px] md:h-full bg-white border-t md:border-t-0 md:border-r border-slate-200 flex flex-col shrink-0 order-2 md:order-1 z-20 relative shadow-sm">
+              {/* Tab Navigation */}
+              <div className="flex border-b border-slate-200 bg-slate-50 p-1.5 gap-1 shrink-0">
+                {['template', 'layout', 'photo'].map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setActiveTab(t)}
+                    className={'flex-1 py-2 px-1 rounded-md text-[11px] font-bold transition-all select-none cursor-pointer ' + (activeTab === t ? 'bg-white text-indigo-650 border border-indigo-150 shadow-xs' : 'text-slate-500 border border-transparent hover:text-slate-800')}
+                  >
+                    {t === 'template' && 'シルエット形状'}
+                    {t === 'layout' && '分割レイアウト'}
+                    {t === 'photo' && '写真インポート / 操作'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tab Content */}
+              <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
+                {activeTab === 'template' && (
+                  <div className="space-y-4 animate-fadeIn">
+                    <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl">
+                      <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block mb-2">1. シェイプ・型を選択</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {PRESET_SHAPES.map((shape) => (
+                          <button
+                            key={shape.id}
+                            onClick={() => setSelectedShape(shape)}
+                            className={'p-2.5 rounded-lg border text-left transition-all cursor-pointer ' + (selectedShape.id === shape.id ? 'border-indigo-500 bg-indigo-50/50 shadow-xs' : 'border-slate-200 hover:border-slate-300')}
+                          >
+                            <span className="text-base mr-1.5">{shape.icon}</span>
+                            <span className="text-xs font-bold text-slate-800">{shape.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {selectedShape.id === 'shape_preset' ? (
+                      <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl space-y-2">
+                        <span className="text-[11px] font-bold text-slate-700 block">プリセット形状を選択設定</span>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {SHAPE_SUB_PRESETS.map((sub) => (
+                            <button
+                              key={sub.id}
+                              onClick={() => setSelectedSubShape(sub)}
+                              className={'p-2 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all text-slate-705 cursor-pointer ' + (selectedSubShape.id === sub.id ? 'bg-white border-indigo-500 text-indigo-750 shadow-xs' : 'bg-white border-slate-150 hover:bg-slate-50')}
+                            >
+                              <span>{sub.icon}</span>
+                              <span className="truncate">{sub.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl space-y-3">
+                        <span className="text-[11px] font-bold text-slate-700 block">テキスト入力</span>
+                        <input
+                          type="text"
+                          value={customText}
+                          onChange={(e) => setCustomText(e.target.value.slice(0, 15))}
+                          placeholder="LOVE"
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                        />
+                        <p className="text-[10px] text-slate-400">文字数やアルファベット・スペース入力に応じて自動でマルチライン対応されます。</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'layout' && (
+                  <div className="space-y-4 animate-fadeIn">
+                    <div className="bg-slate-50 border border-slate-101 border-slate-100 p-3 rounded-xl space-y-3">
+                      <span className="text-[11px] font-bold text-slate-700 block">2. 配置アルゴリズムの制御</span>
+                      <div className="flex flex-col gap-1.5">
+                        {[
+                          { id: 'GRID', label: '格子状グリッド', desc: '整然としたモザイクフレームを敷き詰めます' },
+                          { id: 'OFFS_BRICK', label: 'レンガ積み調', desc: '偶数行をズラした美しく配置しやすい西洋レンガ積み' }
+                        ].map((alg) => (
+                          <button
+                            key={alg.id}
+                            onClick={() => setLayoutStyle(alg.id)}
+                            className={'p-2 rounded-lg border text-left transition-all cursor-pointer ' + (layoutStyle === alg.id ? 'border-indigo-500 bg-indigo-50/50 text-indigo-900 font-bold' : 'bg-white border-slate-150 hover:border-slate-200')}
+                          >
+                            <span className="text-xs font-bold text-slate-800 block">{alg.label}</span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">{alg.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl space-y-2">
+                      <div className="flex justify-between items-center text-[11px] font-bold text-slate-700">
+                        <span>3. 分割フレーム数密度</span>
+                        <input
+                          type="number"
+                          min="10"
+                          max="200"
+                          value={density}
+                          onChange={(e) => {
+                            const valStr = e.target.value;
+                            if (valStr === '') {
+                              setDensity('');
+                            } else {
+                              const val = Number(valStr);
+                              if (!isNaN(val)) setDensity(val);
+                            }
+                          }}
+                          onBlur={() => {
+                            if (density === '' || density < 10) setDensity(10);
+                            if (density > 200) setDensity(200);
+                          }}
+                          className="w-16 px-1.5 py-0.5 text-xs text-indigo-600 bg-white border border-slate-200 rounded font-mono font-bold text-right focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <input
+                        type="range"
+                        min="10"
+                        max="200"
+                        value={density}
+                        onChange={(e) => setDensity(Number(e.target.value))}
+                        className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                      />
+                      <div className="flex justify-between text-[9px] text-slate-400 font-bold">
+                        <span>粗い (大サイズの枠)</span>
+                        <span>極細 (小サイズの枠)</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'photo' && (
+                  <div className="space-y-4 animate-fadeIn">
+                    <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl space-y-2">
+                       <span className="text-[11px] font-bold text-slate-700 block">4. 写真の一括加工コントロール</span>
+                       <div className="grid grid-cols-3 gap-1.5">
+                         <button
+                           onClick={handleAutoFillPhotos}
+                           className="py-2 px-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[10px] font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer"
+                         >
+                           <Icon name="sparkles" className="w-4 h-4 text-indigo-505" />
+                           一括自動挿入
+                         </button>
+                         <button
+                           onClick={handleShufflePhotos}
+                           className="py-2 px-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[10px] font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer"
+                         >
+                           <Icon name="shuffle" className="w-4 h-4 text-slate-500" />
+                           一括シャッフル
+                         </button>
+                         <button
+                           onClick={handleClearPhotoAssignments}
+                           className="py-2 px-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-[10px] font-bold transition-all flex flex-col items-center justify-center gap-1 cursor-pointer"
+                         >
+                           <Icon name="trash-2" className="w-4 h-4 text-red-520" />
+                           割当クリア
+                         </button>
+                       </div>
+                    </div>
+
+                    {/* モザイク写真プールへのインポートセクション（サンプル画像は不要） */}
+                    <div className="bg-slate-50 border border-slate-150 p-3.5 rounded-xl space-y-3">
+                      <span className="text-xs font-bold text-slate-700 block text-left">フォトインポーター (サンプルなし)</span>
+                      
+                      {/* 1. 通常のローカル写真ファイル一括選択 */}
+                      <div className="text-center">
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          onChange={handleLocalFileSelect}
+                          className="hidden"
+                          id="base-local-file-input"
+                        />
+                        <label
+                          htmlFor="base-local-file-input"
+                          className="py-2.5 px-3 border border-dashed border-indigo-300 bg-white hover:bg-indigo-50/30 text-indigo-650 rounded-lg text-xs font-bold transition-all block cursor-pointer"
+                        >
+                          <Icon name="upload" className="w-4 h-4 mx-auto mb-1 text-indigo-500" />
+                          📁 ローカル写真の一括選択 (複数枚)
+                        </label>
+                      </div>
+
+                      {/* 2. Google フォトから一括選択 */}
+                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-2.5 space-y-2">
+                        <div className="flex items-center gap-1.5 text-blue-700 font-bold text-[11px]">
+                          <span>🔵 Google フォトからインポート</span>
+                        </div>
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          onChange={handleGooglePhotosSelect}
+                          className="hidden"
+                          id="google-photos-file-input"
+                        />
+                        <label
+                          htmlFor="google-photos-file-input"
+                          className="py-2 px-3 border border-dashed border-blue-300 bg-white hover:bg-blue-50/50 text-blue-600 rounded-lg text-[10.5px] font-bold transition-all block cursor-pointer"
+                        >
+                          <Icon name="upload" className="w-3.5 h-3.5 mx-auto mb-1 text-blue-505" />
+                          Google フォトから複数枚一括で選択
+                        </label>
+                      </div>
+
+                      {/* 3. Amazon Photosから一括選択 */}
+                      <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-2.5 space-y-2">
+                        <div className="flex items-center gap-1.5 text-amber-700 font-bold text-[11px]">
+                          <span>🔶 Amazon Photosからインポート</span>
+                        </div>
+                        <input
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          onChange={handleAmazonPhotosSelect}
+                          className="hidden"
+                          id="amazon-photos-file-input"
+                        />
+                        <label
+                          htmlFor="amazon-photos-file-input"
+                          className="py-2 px-3 border border-dashed border-amber-300 bg-white hover:bg-amber-50/50 text-amber-600 rounded-lg text-[10.5px] font-bold transition-all block cursor-pointer"
+                        >
+                          <Icon name="upload" className="w-3.5 h-3.5 mx-auto mb-1 text-amber-505" />
+                          Amazon Photosから複数枚一括で選択
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* 現在プールにアップロードされた写真の総数表示 */}
+                    <div className="p-3 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-between text-xs text-slate-600 font-semibold">
+                      <span>現在の写真プール総数:</span>
+                      <span className="font-mono text-indigo-600 text-sm font-bold bg-white px-2 py-0.5 rounded border border-slate-150">{currentPool.length} 枚</span>
+                    </div>
+
+                  </div>
+                )}
+              </div>
+
+              {/* Progress & Actions */}
+              <div className="p-3 border-t border-slate-200 bg-slate-50/50 space-y-2 select-none shrink-0">
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
+                  <span>配列充填状況:</span>
+                  <span>{progressPercent}% ({filledCount}/{frames.length} 枚)</span>
+                </div>
+                <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: progressPercent + '%' }}></div>
+                </div>
+              </div>
+
+              {/* Action output buttons footer */}
+              <div className="p-3 border-t border-slate-200 shrink-0 bg-slate-50 flex items-center justify-between gap-2">
+                <button
+                  onClick={handleExportPNG}
+                  disabled={isLoading || frames.length === 0}
+                  className="w-full py-2.5 bg-emerald-600 font-bold text-white rounded-lg flex items-center justify-center gap-1.5 text-xs shadow-xs hover:shadow transition-all cursor-pointer"
+                >
+                  <Icon name="download" className="w-4 h-4 text-emerald-100" />
+                  PNGで書き出し保存
+                </button>
+              </div>
+            </aside>
+
+            {/* Canvas Preview Area */}
+            <main className="flex-1 bg-slate-100 p-2 sm:p-4 md:p-8 flex flex-col items-center justify-between overflow-y-auto relative order-1 md:order-2">
+              <div className="absolute inset-x-0 top-0 h-full opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+
+              {/* Toolbar */}
+              <div className="w-full max-w-2xl bg-white rounded-xl px-3 py-2 border border-slate-200 flex flex-wrap justify-between items-center gap-3.5 shadow-xs relative z-10 animate-slideDown">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-500 font-bold select-none">ズーム:</span>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => setZoomLevel(Math.max(50, zoomLevel - 10))} className="p-1 hover:bg-slate-100 rounded text-slate-550"><Icon name="chevronLeft" className="w-3.5 h-3.5" /></button>
+                    <span className="text-[10.5px] font-mono font-bold text-slate-650 w-8 text-center">{zoomLevel}%</span>
+                    <button onClick={() => setZoomLevel(Math.min(180, zoomLevel + 10))} className="p-1 hover:bg-slate-100 rounded text-slate-550"><Icon name="chevronRight" className="w-3.5 h-3.5" /></button>
+                  </div>
+                </div>
+
+                {/* Aspect Selector */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-slate-500 font-bold select-none">画角比:</span>
+                  <div className="flex gap-1">
+                     {['1:1', '3:4', '4:3', '16:9', '9:16'].map(ratio => (
+                       <button
+                         key={ratio}
+                         onClick={() => setCanvasAspectRatio(ratio)}
+                         className={'px-1.5 py-0.5 rounded text-[9.5px] font-bold ' + (canvasAspectRatio === ratio ? 'bg-indigo-500 text-white shadow-xs' : 'bg-slate-100 hover:bg-slate-200 text-slate-600')}
+                       >
+                         {ratio}
+                       </button>
+                     ))}
+                  </div>
+                </div>
+
+                {/* HSL adjustment */}
+                <div className="flex items-center gap-4 border-l border-slate-200 pl-4 py-0.5" id="canvas-bg-controls">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center justify-between text-[8px] font-bold select-none leading-none mb-0.5">
+                      <span className="text-slate-500">背景色調色:</span>
+                      <span className="font-mono text-[8px] text-indigo-650 bg-indigo-50 px-0.5 rounded font-semibold ml-1">
+                        {'HSL(' + bgHue + ',' + bgSat + '%,' + bgLight + '%)'}
+                      </span>
+                    </div>
+                    <div className="space-y-0.5 w-[140px]" id="hsl-sliders-group-portable">
+                      {/* Hue */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-[7.5px] text-slate-400 w-2.5 font-bold select-none">色</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="360"
+                          value={bgHue}
+                          onChange={(e) => setBgHue(Number(e.target.value))}
+                          className="flex-1 h-1 rounded-sm appearance-none cursor-pointer accent-slate-600"
+                          style={{
+                            background: 'linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)'
+                          }}
+                        />
+                      </div>
+                      {/* Saturation */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-[7.5px] text-slate-400 w-2.5 font-bold select-none">彩</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={bgSat}
+                          onChange={(e) => setBgSat(Number(e.target.value))}
+                          className="flex-1 h-1 rounded-sm appearance-none cursor-pointer accent-indigo-500"
+                          style={{
+                            background: 'linear-gradient(to right, #808080, hsl(' + bgHue + ', 100%, 50%))'
+                          }}
+                        />
+                      </div>
+                      {/* Lightness */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-[7.5px] text-slate-400 w-2.5 font-bold select-none">明</span>
+                        <input
+                          type="range"
+                          min="10"
+                          max="100"
+                          value={bgLight}
+                          onChange={(e) => setBgLight(Number(e.target.value))}
+                          className="flex-1 h-1 rounded-sm appearance-none cursor-pointer accent-indigo-600"
+                          style={{
+                            background: 'linear-gradient(to right, #151515, hsl(' + bgHue + ',' + bgSat + '%,50%), #ffffff)'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Canvas viewport container */}
+              <div className="flex-1 flex items-center justify-center py-4 w-full relative z-10 select-none animate-fadeIn" style={{ minHeight: '380px' }}>
+                <div
+                  className="rounded-2xl shadow-xl transition-all relative overflow-hidden flex flex-wrap border border-slate-200/50"
+                  style={{
+                    backgroundColor: canvasBg,
+                    width: (canvasAspectRatio === '1:1' || canvasAspectRatio === '3:4' || canvasAspectRatio === '9:16') ? '430px' : '520px',
+                    aspectRatio: canvasAspectRatio === '1:1' ? '1' : canvasAspectRatio === '3:4' ? '3/4' : canvasAspectRatio === '4:3' ? '4/3' : canvasAspectRatio === '16:9' ? '16/9' : '9/16',
+                    transform: 'scale(' + (zoomLevel / 100) + ')'
+                  }}
+                  onDragOver={(e) => e.preventDefault()}
+                >
+                  {isLoading && (
+                    <div className="absolute inset-0 bg-white/70 backdrop-blur-xs flex items-center justify-center z-50">
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></span>
+                        <span className="text-[10px] text-slate-500 font-bold tracking-tight">等高線レイアウトを計算中...</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Render frames */}
+                  {frames.map((frame) => {
+                    const isSelected = selectedFrameId === frame.id;
+                    const isHovered = hoveredFrameId === frame.id;
+
+                    return (
+                      <div
+                        key={frame.id}
+                        onDragOver={(e) => { e.preventDefault(); setHoveredFrameId(frame.id); }}
+                        onDragLeave={() => setHoveredFrameId(null)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setHoveredFrameId(null);
+                          const url = e.dataTransfer.getData('text/plain');
+                          if (url) {
+                            setFrames(prev => prev.map(f => f.id === frame.id ? { ...f, imageUrl: url } : f));
+                          }
+                        }}
+                        onClick={() => setSelectedFrameId(frame.id === selectedFrameId ? null : frame.id)}
+                        className={'absolute cursor-pointer transition-all duration-150 overflow-hidden group ' + (layoutStyle === 'CIRCLE' ? 'rounded-full' : 'rounded')}
+                        style={{
+                          left: frame.x + '%',
+                          top: frame.y + '%',
+                          width: frame.width + '%',
+                          height: frame.height + '%',
+                          backgroundColor: frame.imageUrl ? 'transparent' : 'rgba(255, 255, 255, 0.45)',
+                          border: isSelected ? '2px solid #6366f1' : isHovered ? '2px solid #3b82f6' : '1px solid rgba(0,0,0,0.1)',
+                          boxShadow: isHovered ? '0 0 8px rgba(99,102,241,0.3)' : 'none'
+                        }}
+                      >
+                        {frame.imageUrl ? (
+                          <img src={frame.imageUrl} className="w-full h-full object-cover pointer-events-none" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-[7.5px] text-slate-400 font-bold opacity-60">
+                            +
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Bot tutorial banner inside single HTML */}
+              <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-xl p-4 flex gap-3 text-xs text-slate-600 relative z-10 font-sans shadow-sm">
+                <div className="w-6 h-6 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold shrink-0 mt-0.5">💡</div>
+                <div className="flex-1 space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-800">インタラクティブ設計チュートリアル (ステップ {tutorialStep}/3)</span>
+                    <div className="flex items-center gap-1.5">
+                      {tutorialStep > 1 && <button onClick={() => setTutorialStep(tutorialStep - 1)} className="text-[10px] text-slate-500 bg-slate-100 p-0.5 px-1.5 rounded cursor-pointer">戻る</button>}
+                      {tutorialStep < 3 ? <button onClick={() => setTutorialStep(tutorialStep + 1)} className="text-[10px] bg-indigo-50 text-indigo-600 font-bold p-0.5 px-1.5 rounded cursor-pointer">次へ →</button> : <button onClick={() => setTutorialStep(1)} className="text-[10px] bg-indigo-100 text-indigo-700 p-0.5 px-1.5 rounded cursor-pointer">最初から読む</button>}
+                    </div>
+                  </div>
+                  <div className="mt-1">
+                    {tutorialStep === 1 && <p className="text-[11px] text-slate-500 leading-normal">1. 「写真アップロード」機能またはGoogle/Amazonインポーターを使うことで、お手持ちの写真（複数可）から簡単に追加できます。</p>}
+                    {tutorialStep === 2 && <p className="text-[11px] text-slate-500 leading-normal">2. 「一括自動挿入」を押すと、すべてのグレー枠へ自動的に写真が一発で流し込まれます。</p>}
+                    {tutorialStep === 3 && <p className="text-[11px] text-slate-500 leading-normal">3. 「一括シャッフル」を使うことで、配置済みの写真を瞬時にランダムに並び替えできます。</p>}
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+
+          {/* Toast Notification Container */}
+          {successMessage && (
+            <div className="fixed top-4 right-4 z-50 bg-slate-900 border border-slate-800 text-white font-semibold text-xs py-2.5 px-4 rounded-xl shadow-2xl animate-bounce flex items-center gap-2">
+              <Icon name="check" className="w-4 h-4 text-emerald-400" />
+              <span>{successMessage}</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

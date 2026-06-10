@@ -1,0 +1,6 @@
+{
+  "name": "フォトアート",
+  "description": "A high-performance Canva-ready application simulating shape-constrained photo mosaic frame layout, customization, and image management in Japanese.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
